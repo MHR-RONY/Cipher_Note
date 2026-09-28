@@ -91,7 +91,6 @@ src
   components/ui/   Radix-based primitives
   context/         AuthContext (account, token, loading)
   lib/api.ts       REST client, bearer auth, 401 handling
-  lib/demo.ts      local workspace store used by the current pages
   server.ts        SSR entry with an error boundary
   start.ts         request middleware, CSRF for server functions
   styles.css       theme tokens and layout
@@ -99,22 +98,10 @@ src
 
 ## Data layer
 
-`src/lib/api.ts` is the real client for the backend API. It attaches
+`src/lib/api.ts` is the client for the backend API. It attaches
 `Authorization: Bearer <token>`, and on a 401 it clears the stored session and
 sends the visitor back to `/login`. `AuthContext` restores a session on load by
 calling `/auth/me`.
-
-The pages currently read and write through `src/lib/demo.ts`, a
-localStorage-backed workspace, so the UI runs end to end without a server.
-Swapping a page over to the live API means changing its `demo` calls to the
-matching `api` calls — the response shapes already line up.
-
-Demo sign-in while that store is in place:
-
-| Area          | Email              | Password    |
-| ------------- | ------------------ | ----------- |
-| Member        | `lee@inkwell.demo` | `member123` |
-| Administrator | `ada@inkwell.demo` | `admin123`  |
 
 ## Security notes
 
@@ -123,5 +110,5 @@ Demo sign-in while that store is in place:
 - `bunfig.toml` skips package versions published in the last 24 hours.
 - Write forms validate with zod before anything is sent.
 
-Route guards and the demo store run in the browser, so they shape the
-experience rather than enforce access. Authorization belongs to the API.
+Route guards run in the browser, so they shape the experience rather than
+enforce access. Authorization belongs to the API.
