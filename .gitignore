@@ -35,3 +35,8 @@ AGENTS.md
 .claude/
 
 package-lock.json
+
+# Env
+.env
+.env.*
+!.env.example
