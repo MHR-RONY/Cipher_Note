@@ -34,5 +34,4 @@ CLAUDE.md
 AGENTS.md
 .claude/
 
-# bun is the package manager for this repo
 package-lock.json
