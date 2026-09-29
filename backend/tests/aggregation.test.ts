@@ -19,8 +19,9 @@ describe("aggregation: users grouped by interests", () => {
   });
 });
 
-describe("aggregation: posts by author", () => {
-  it("paginates one author's posts and returns their name", async () => {
+describe("aggregation: posts by author (admin)", () => {
+  it("paginates one member's posts and returns their name", async () => {
+    const admin = await setupAdmin();
     const user = await registerUser({ email: "author@example.com" });
     await Promise.all(
       Array.from({ length: 3 }, (_, i) =>
@@ -29,8 +30,8 @@ describe("aggregation: posts by author", () => {
     );
 
     const res = await agent
-      .get(`/api/user/posts/author/${user.user._id}?limit=2`)
-      .set("Authorization", `Bearer ${user.token}`);
+      .get(`/api/admin/users/${user.user._id}/posts?limit=2`)
+      .set("Authorization", `Bearer ${admin.token}`);
     expect(res.status).toBe(200);
     expect(res.body.name).toBe("Test User");
     expect(res.body.data).toHaveLength(2);
@@ -38,10 +39,10 @@ describe("aggregation: posts by author", () => {
   });
 
   it("returns 404 for a user that does not exist", async () => {
-    const user = await registerUser({ email: "caller@example.com" });
+    const admin = await setupAdmin();
     const res = await agent
-      .get("/api/user/posts/author/64b000000000000000000000")
-      .set("Authorization", `Bearer ${user.token}`);
+      .get("/api/admin/users/64b000000000000000000000/posts")
+      .set("Authorization", `Bearer ${admin.token}`);
     expect(res.status).toBe(404);
   });
 });
