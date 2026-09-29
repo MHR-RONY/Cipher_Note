@@ -169,10 +169,9 @@ backend/src
 frontend/src
   routes/            file-based routes; routeTree.gen.ts is generated
   components/        AppShell, AuthGuards, LoginPage, Notes, Forms, UserForm, Pagination
-  components/ui/     Radix-based primitives (shadcn scaffolding; not all of it is wired up)
   context/           AuthContext — a user session and an admin session, independently
   lib/               api.ts (userApi, adminApi — one typed REST client per panel),
-                     error-capture.ts + error-page.ts (SSR error recovery), utils.ts
+                     error-capture.ts + error-page.ts (SSR error recovery)
   styles.css         theme tokens and layout
 ```
 
@@ -189,16 +188,3 @@ frontend/src
   body can't smuggle in fields like an id or a role.
 - Route guards in the frontend (`Protected`, `AdminOnly`) shape the UI only.
   Authorization is enforced by the API.
-
-## Known dead code
-
-- `GET /api/user/posts/author/:id` and the matching `userApi.postsByAuthor`
-  client method exist and are covered by a backend test, but no frontend
-  route or component calls them — the member posts feed (`posts.tsx`) shows
-  everyone's posts, not one author's. The admin's per-member posts view
-  (`admin.users.$id.posts.tsx`) uses a separate, actually-wired-up endpoint
-  (`adminApi.userPosts` → `/api/admin/users/:id/posts`).
-- `frontend/src/components/ui/` is shadcn-style scaffolding; not all of it is
-  imported anywhere. `react-hook-form` and `@hookform/resolvers` are
-  dependencies but unused outside that scaffolding — every real form in the
-  app is plain `useState`.
