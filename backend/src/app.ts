@@ -26,6 +26,13 @@ export const createApp = (): Express => {
   const app = express();
 
   app.disable("x-powered-by");
+
+  // Heroku (and most PaaS routers) terminate TLS and forward with X-Forwarded-For.
+  // Without this, express-rate-limit refuses to key on that header and every
+  // rate-limited route 500s. 1 = trust only the immediate proxy, so a client
+  // cannot spoof its way past the limiter by sending its own X-Forwarded-For.
+  if (process.env["TRUST_PROXY"] === "1") app.set("trust proxy", 1);
+
   app.use(helmet());
   app.use(express.json({ limit: "10kb" }));
 
