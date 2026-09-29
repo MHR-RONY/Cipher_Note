@@ -177,9 +177,9 @@ frontend/src
 
 ## Security notes
 
-- Passwords are hashed with bcrypt (12 rounds) and never selected by default;
-  the two login paths run a dummy bcrypt compare against a missing account so
-  a wrong password and an unknown email look the same from the outside.
+- Passwords are hashed with bcrypt (12 rounds) and never selected by default.
+  Login takes the same amount of time whether the email exists or not, so an
+  attacker can't tell which emails are registered by measuring response speed.
 - Each panel has its own JWT secret pinned to `HS256`, so a token from one
   panel is structurally rejected by the other, not just by a role check.
 - CORS is scoped per panel to its own origin; rate limits sit behind CORS so a
