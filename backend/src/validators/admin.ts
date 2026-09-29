@@ -1,4 +1,6 @@
+import { Types } from "mongoose";
 import { z } from "zod";
+import { noteSchema } from "./user.js";
 
 // Normalize before the format check: zod applies .trim()/.toLowerCase() after
 // z.email() would already have rejected " A@B.CO ".
@@ -29,3 +31,16 @@ export const userUpdateSchema = z.object({
   interests,
   password: password.optional(),
 });
+
+// Format only. Existence is a separate 404 in the controller, since a well-formed
+// id for a deleted user is a missing resource, not a malformed request.
+const objectIdString = z
+  .string()
+  .trim()
+  .refine((value) => Types.ObjectId.isValid(value), "must be a valid id");
+
+// An admin writes notes on behalf of a user, so the owner is explicit in the body.
+// Note.owner is a User ref, so an admin _id could never stand in for it.
+export const adminNoteCreateSchema = noteSchema.extend({ ownerId: objectIdString });
+
+export const adminNoteUpdateSchema = noteSchema;
