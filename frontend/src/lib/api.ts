@@ -166,10 +166,6 @@ export const userApi = {
   createPost: (data: { title: string; body: string }) =>
     userClient.request<Post>("/posts", { method: "POST", body: JSON.stringify(data) }),
   posts: (page?: number) => userClient.request<PaginatedResponse<Post>>(`/posts?${params(page)}`),
-  postsByAuthor: (authorId: string, page?: number) =>
-    userClient.request<{ name: string } & PaginatedResponse<Post>>(
-      `/posts/author/${authorId}?${params(page)}`,
-    ),
 };
 
 export const adminApi = {
