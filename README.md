@@ -22,7 +22,12 @@ the secrets differ, so rejection is structural, not a role check.
 | CORS origin | `USER_PANEL_URL` | `ADMIN_PANEL_URL` |
 
 Auth middleware loads the account by `_id` on every request, so a deleted
-account loses access immediately. The admin owns no notes.
+account loses access immediately.
+
+`Note.owner` is a `User` ref, so an admin `_id` can never own a note. An admin
+writes notes on behalf of a user instead: create takes an explicit `ownerId`,
+while update and delete act on any note by id with no ownership filter, since
+the admin already reads every note.
 
 ## Setup
 
@@ -99,6 +104,10 @@ There is no seed script and no demo data.
 | DELETE | `/api/admin/users/:id` | admin — cascades to notes and posts |
 | GET | `/api/admin/users/:id/posts?page&limit` | admin |
 | GET | `/api/admin/notes?page&limit&userId` | admin — `userId` optional |
+| GET | `/api/admin/notes/:id` | admin — any note, any owner |
+| POST | `/api/admin/notes` | admin — body adds `ownerId` |
+| PUT | `/api/admin/notes/:id` | admin — any note |
+| DELETE | `/api/admin/notes/:id` | admin — any note |
 
 ### Shapes
 
