@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { agent, registerUser, setupAdmin } from "./helpers.js";
+import { adminSession, agent, registerUser } from "./helpers.js";
 
 describe("aggregation: users grouped by interests", () => {
   it("groups, counts and sorts by count desc then interest", async () => {
-    const admin = await setupAdmin();
+    const admin = await adminSession();
     await registerUser({ email: "i1@example.com", interests: ["reading", "music"] });
     await registerUser({ email: "i2@example.com", interests: ["reading"] });
     await registerUser({ email: "i3@example.com", interests: ["music"] });
@@ -21,7 +21,7 @@ describe("aggregation: users grouped by interests", () => {
 
 describe("aggregation: posts by author (admin)", () => {
   it("paginates one member's posts and returns their name", async () => {
-    const admin = await setupAdmin();
+    const admin = await adminSession();
     const user = await registerUser({ email: "author@example.com" });
     await Promise.all(
       Array.from({ length: 3 }, (_, i) =>
@@ -39,7 +39,7 @@ describe("aggregation: posts by author (admin)", () => {
   });
 
   it("returns 404 for a user that does not exist", async () => {
-    const admin = await setupAdmin();
+    const admin = await adminSession();
     const res = await agent
       .get("/api/admin/users/64b000000000000000000000/posts")
       .set("Authorization", `Bearer ${admin.token}`);
