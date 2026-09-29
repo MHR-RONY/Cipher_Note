@@ -12,6 +12,7 @@ const required = (key: "MONGO_URI"): string => {
 const start = async (): Promise<void> => {
   assertJwtSecrets();
   await connectDb(required("MONGO_URI"));
+  console.log("Database is connected");
 
   const port = Number(process.env["PORT"] ?? 5000);
   app.listen(port, () => {
