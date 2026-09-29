@@ -19,6 +19,17 @@ export const Route = createFileRoute("/register")({
   component: Register,
 });
 
+const INTEREST_OPTIONS = [
+  "chess",
+  "reading",
+  "gaming",
+  "music",
+  "sports",
+  "travel",
+  "cooking",
+  "coding",
+];
+
 function Register() {
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -26,7 +37,15 @@ function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [interests, setInterests] = useState<string[]>([]);
   const [error, setError] = useState("");
+  function toggleInterest(interest: string) {
+    setInterests((current) =>
+      current.includes(interest)
+        ? current.filter((value) => value !== interest)
+        : [...current, interest],
+    );
+  }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const trimmedName = name.trim();
@@ -47,7 +66,7 @@ function Register() {
       return;
     }
     try {
-      await register({ name: trimmedName, email, password, interests: [] });
+      await register({ name: trimmedName, email, password, interests });
       void navigate({ to: "/notes" });
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "Unable to create your account.");
@@ -116,6 +135,21 @@ function Register() {
               minLength={8}
               required
             />
+            <label className="field">
+              <span>Interests (optional)</span>
+              <div className="interest-picker">
+                {INTEREST_OPTIONS.map((interest) => (
+                  <label key={interest} className="interest-option">
+                    <input
+                      type="checkbox"
+                      checked={interests.includes(interest)}
+                      onChange={() => toggleInterest(interest)}
+                    />
+                    {interest}
+                  </label>
+                ))}
+              </div>
+            </label>
             <button className="button button-primary auth-submit">
               Create my account <ArrowRight size={17} />
             </button>
