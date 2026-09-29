@@ -59,10 +59,10 @@ prefilled demo emails and passwords in `login.tsx` and `admin.login.tsx`.
 
 | ID | Title | Owner | Depends on | Status |
 |---|---|---|---|---|
-| T1 | Foundation | foundation | — | doing |
-| T2 | User API | user-api | T1 | todo |
-| T3 | Admin API | admin-api | T1 | todo |
-| T4 | Aggregations | aggregation | T1 | todo |
+| T1 | Foundation | foundation | — | review (merged, awaiting T9) |
+| T2 | User API | user-api | T1 | doing |
+| T3 | Admin API | admin-api | T1 | doing |
+| T4 | Aggregations | aggregation | T1 | doing |
 | T5 | Backend security & lean pass | backend-reviewer | T2, T3, T4 | todo |
 | T6 | Backend tests + explain report | tester | T5 | todo |
 | T7 | Frontend API rewrite | frontend-api | T5 | todo |
@@ -120,3 +120,4 @@ Every call site in the inventory above rewired; `src/lib/demo.ts` deleted; role 
 
 | # | Task | Description | Found by | Fixed by | Status |
 |---|---|---|---|---|---|
+| B1 | T5 | Rate limiters are registered in `app.js` before the per-router CORS middleware, so a 429 response carries no `Access-Control-Allow-Origin` header. The browser then reports a network failure (`api.ts` turns it into "Unable to reach the API") instead of surfacing the throttle message. Move the limiters after the CORS middleware, or apply CORS before them. | orchestrator | T5 | open |
