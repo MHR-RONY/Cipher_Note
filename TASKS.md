@@ -8,13 +8,13 @@ after running the acceptance check itself. Owning agents set `doing` and report
 
 | ID | Title | Owner agent | Depends on | Files touched | Acceptance check | Status |
 |---|---|---|---|---|---|---|
-| T0 | Repo restructure to `/frontend` + `/backend` | restructure (orchestrator, main tree) | — | all root files → `frontend/`, delete legacy JS `backend/`, root `package.json`, `.gitignore` | `cd frontend && bun install && bun run build` succeeds; `bunx tsc --noEmit` clean; no frontend file left at repo root | todo |
-| T1 | Backend foundation (TypeScript) | foundation | T0 | `backend/{package,tsconfig}.json`, `.env.example`, `src/{app,server}.ts`, `src/config/db.ts`, `src/middleware/*.ts`, `src/utils/*.ts`, `src/models/*.ts` | `tsc --noEmit` clean; exactly 3 `schema.index(` calls repo-wide; zero `index: true` / `unique: true` on a field; `app.ts` exports without listening; CORS registered before rate limiters (bug B1) | todo |
-| T2 | User API | user-api | T1 | `src/routes/user/*.ts`, `src/controllers/{userAuth,note,post}Controller.ts`, `src/validators/user.ts` | every path/shape matches the API contract; ownership in the query filter; invalid ObjectId → 404 with no DB call; generic login message + dummy bcrypt compare; zod on every write | todo |
-| T3 | Admin API | admin-api | T1 | `src/routes/admin/*.ts`, `src/controllers/{setup,adminAuth,adminUser,adminNote}Controller.ts`, `src/validators/admin.ts` | setup succeeds once then 404s; wrong key → 403 via `timingSafeEqual`; `grouped-by-interests` registered before `/users/:id`; user delete cascades to notes + posts | todo |
-| T4 | Aggregations | aggregation | T1 | `src/controllers/aggregationController.ts` | exactly one `aggregate(` per handler, nothing else in the interests handler; `$lookup` with `let`+`pipeline`+`$facet`; id cast with `new mongoose.Types.ObjectId`; 404 on missing user | todo |
-| T5 | Backend security & lean pass | backend-reviewer | T2, T3, T4 | all of `backend/src` | every CLAUDE.md security-checklist line verified in code; `tsc --noEmit` clean; no unjustified `any` in a model or controller signature; `build` and `dev` scripts both run; no dead code or unused deps | todo |
-| T6 | Backend tests + explain report | tester | T5 | `backend/tests/**`, `backend/vitest.config.ts`, `docs/explain-report.md` | `npm test` green; covers the 10 listed cases; `explain("executionStats")` shows IXSCAN on all three indexed queries; logs bugs here, fixes none | todo |
+| T0 | Repo restructure to `/frontend` + `/backend` | restructure (orchestrator, main tree) | — | all root files → `frontend/`, delete legacy JS `backend/`, root `package.json`, `.gitignore` | `cd frontend && bun install && bun run build` succeeds; `bunx tsc --noEmit` clean; no frontend file left at repo root | doing |
+| T1 | Backend foundation (TypeScript) | foundation | T0 | `backend/{package,tsconfig}.json`, `.env.example`, `src/{app,server}.ts`, `src/config/db.ts`, `src/middleware/*.ts`, `src/utils/*.ts`, `src/models/*.ts` | `tsc --noEmit` clean; exactly 3 `schema.index(` calls repo-wide; zero `index: true` / `unique: true` on a field; `app.ts` exports without listening; CORS registered before rate limiters (bug B1) | doing |
+| T2 | User API | user-api | T1 | `src/routes/user/*.ts`, `src/controllers/{userAuth,note,post}Controller.ts`, `src/validators/user.ts` | every path/shape matches the API contract; ownership in the query filter; invalid ObjectId → 404 with no DB call; generic login message + dummy bcrypt compare; zod on every write | doing |
+| T3 | Admin API | admin-api | T1 | `src/routes/admin/*.ts`, `src/controllers/{setup,adminAuth,adminUser,adminNote}Controller.ts`, `src/validators/admin.ts` | setup succeeds once then 404s; wrong key → 403 via `timingSafeEqual`; `grouped-by-interests` registered before `/users/:id`; user delete cascades to notes + posts | doing |
+| T4 | Aggregations | aggregation | T1 | `src/controllers/aggregationController.ts` | exactly one `aggregate(` per handler, nothing else in the interests handler; `$lookup` with `let`+`pipeline`+`$facet`; id cast with `new mongoose.Types.ObjectId`; 404 on missing user | doing |
+| T5 | Backend security & lean pass | backend-reviewer | T2, T3, T4 | all of `backend/src` | every CLAUDE.md security-checklist line verified in code; `tsc --noEmit` clean; no unjustified `any` in a model or controller signature; `build` and `dev` scripts both run; no dead code or unused deps | doing |
+| T6 | Backend tests + explain report | tester | T5 | `backend/tests/**`, `backend/vitest.config.ts`, `docs/explain-report.md` | `npm test` green; covers the 10 listed cases; `explain("executionStats")` shows IXSCAN on all three indexed queries; logs bugs here, fixes none | doing |
 | T7 | Frontend API rewrite | frontend-api | T5 | `frontend/src/lib/api.ts`, `frontend/.env.example` | two prefixes, two token keys, one 401 handler per panel; typed fn per contract endpoint; zero `role`; SSR-safe (no bare `localStorage`) | todo |
 | T8 | Demo removal + `/` → login | frontend-cleanup | T7 | every file in the call-site inventory below | `grep -ri demo frontend/src` empty; `tsc --noEmit` + build clean; `/` renders the login form; styling/JSX unchanged | todo |
 | T9 | Documentation | docs | T8 | root `README.md`, `CLAUDE.md` (paths only) | README covers both folders, both env sets, first-run admin setup, dev + test commands | todo |
@@ -26,6 +26,20 @@ after running the acceptance check itself. Owning agents set `doing` and report
 4. T5 alone. 5. T6, looping with T2/T3/T4 owners until green. 6. T7. 7. T8. 8. T9. 9. T10.
 
 ---
+
+## Progress log (orchestrator)
+
+Merged to `master`, verified by the orchestrator, awaiting T10 sign-off. None of
+these are `done` — only T10 flips that.
+
+| Task | Merge commit | What the orchestrator checked itself |
+|---|---|---|
+| T0 | `7c29304` | `frontend/` builds (`vite build` ✓) and `tsc --noEmit` is clean; no frontend file left at repo root; legacy JS backend dropped |
+| T1 | `01cf840` | `tsc --noEmit` clean; exactly 3 `schema.index(` calls; zero `index: true` / field-level `unique: true`; CORS registered before the limiters (B1 fixed); `app.ts` exports without listening |
+| T4 | `0e980de` | `tsc --noEmit` clean; exactly one `aggregate<T>(` per handler and nothing else in the interests handler; stage order matches CLAUDE.md; `$facet` empty-total yields `0` |
+| T2 | `b252ec8` | `tsc --noEmit` clean; ownership in the query filter (other-owner is indistinguishable from missing → 404); one bcrypt compare on every login path; zod strips unknown keys; no `role` anywhere |
+
+T3 (admin-api) was still running at the time of writing.
 
 ## Mismatches found in Step 0
 
@@ -112,3 +126,13 @@ Type-only importers of `api.ts` that T7 must keep compiling: `components/{Pagina
 - [ ] `grep -ri demo frontend/src` returns nothing
 - [ ] Query plans show IXSCAN where an index is expected
 - [ ] README explains setup, env variables, and first-time admin setup
+| B3 | T1 | `backend/.env.example` set `USER_PANEL_URL=http://localhost:5173` and `ADMIN_PANEL_URL=http://localhost:5174`, but the frontend is a single TanStack Start app on port **8080**, so both CORS origins rejected every real browser request. Repro: start backend with the example env, call `/api/user/auth/login` from the app, observe the preflight failure. | orchestrator (T1 verification) | orchestrator, commit `0cda7cf` | fixed |
+
+## Open findings (not bugs — need a decision or a later owner)
+
+| # | Raised by | Finding | Disposition |
+|---|---|---|---|
+| F1 | T2 | No `test` script and no test deps in `backend/package.json`, while CLAUDE.md's Commands section lists `npm test` and Definition of done requires passing tests. | T6 owns this; it installs vitest/supertest/mongodb-memory-server and adds the script. |
+| F2 | T2 | CLAUDE.md does not specify status codes or envelopes for note/post writes. T2 chose 201 + bare object (create), 200 + bare object (get/update), 204 empty (delete). | Accepted — matches CLAUDE.md's documented bare `Note` / `Post` shapes. T7 must type the frontend against exactly this. |
+| F3 | T2 | Responses include Mongoose's `__v`, one field beyond the documented shapes. | Accepted as harmless and consistent; the panels ignore it. Not worth a projection on every read. |
+| F4 | T2 | `types/express.d.ts` declares `user?`/`admin?` optional while `AuthedRequest`/`AdminRequest` assert them required, bridged by a cast in `asyncHandler`. Correct at runtime because the auth middleware always runs first, but the compiler is not what guarantees it — a controller mounted without `authUser` would typecheck and then crash at runtime. | Left as T1 designed it. T5 should confirm every protected route really carries its auth middleware, since types will not catch a miss. |
