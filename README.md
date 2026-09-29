@@ -73,6 +73,10 @@ There is no seed script and no demo data.
 
 ## API
 
+`GET /api/health` returns `{ status, timestamp }`. No auth, no rate limit, and
+outside both panel routers — it is for uptime probes, not browser code. It does
+not check the database connection.
+
 ### User panel
 
 | Method | Path | Access |
