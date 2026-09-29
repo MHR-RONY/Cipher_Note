@@ -1,123 +1,114 @@
-# CipherNote backend build
+# CipherNote build board
 
-Only the reviewer agent (T9) may set a status to `done`, and only after it
-verifies the acceptance check itself. Owning agents move a task to `doing`
-and then to `review`.
+Statuses: `todo` / `doing` / `done`. Only **T10 (reviewer)** may set `done`, and only
+after running the acceptance check itself. Owning agents set `doing` and report
+"ready for review" — never `done`.
 
-## Mismatches (frontend vs CLAUDE.md)
+## Task table
 
-`src/lib/api.ts` is **dead code** — no file imports it. All 15 route and
-component files call `demo.*` from `src/lib/demo.ts`, so the frontend is not
-yet a client of any contract. **CLAUDE.md wins on every path, shape, model and
-security decision.** Where api.ts declares a response *shape* that CLAUDE.md
-also specifies, they already agree and that shape is kept.
+| ID | Title | Owner agent | Depends on | Files touched | Acceptance check | Status |
+|---|---|---|---|---|---|---|
+| T0 | Repo restructure to `/frontend` + `/backend` | restructure (orchestrator, main tree) | — | all root files → `frontend/`, delete legacy JS `backend/`, root `package.json`, `.gitignore` | `cd frontend && bun install && bun run build` succeeds; `bunx tsc --noEmit` clean; no frontend file left at repo root | todo |
+| T1 | Backend foundation (TypeScript) | foundation | T0 | `backend/{package,tsconfig}.json`, `.env.example`, `src/{app,server}.ts`, `src/config/db.ts`, `src/middleware/*.ts`, `src/utils/*.ts`, `src/models/*.ts` | `tsc --noEmit` clean; exactly 3 `schema.index(` calls repo-wide; zero `index: true` / `unique: true` on a field; `app.ts` exports without listening; CORS registered before rate limiters (bug B1) | todo |
+| T2 | User API | user-api | T1 | `src/routes/user/*.ts`, `src/controllers/{userAuth,note,post}Controller.ts`, `src/validators/user.ts` | every path/shape matches the API contract; ownership in the query filter; invalid ObjectId → 404 with no DB call; generic login message + dummy bcrypt compare; zod on every write | todo |
+| T3 | Admin API | admin-api | T1 | `src/routes/admin/*.ts`, `src/controllers/{setup,adminAuth,adminUser,adminNote}Controller.ts`, `src/validators/admin.ts` | setup succeeds once then 404s; wrong key → 403 via `timingSafeEqual`; `grouped-by-interests` registered before `/users/:id`; user delete cascades to notes + posts | todo |
+| T4 | Aggregations | aggregation | T1 | `src/controllers/aggregationController.ts` | exactly one `aggregate(` per handler, nothing else in the interests handler; `$lookup` with `let`+`pipeline`+`$facet`; id cast with `new mongoose.Types.ObjectId`; 404 on missing user | todo |
+| T5 | Backend security & lean pass | backend-reviewer | T2, T3, T4 | all of `backend/src` | every CLAUDE.md security-checklist line verified in code; `tsc --noEmit` clean; no unjustified `any` in a model or controller signature; `build` and `dev` scripts both run; no dead code or unused deps | todo |
+| T6 | Backend tests + explain report | tester | T5 | `backend/tests/**`, `backend/vitest.config.ts`, `docs/explain-report.md` | `npm test` green; covers the 10 listed cases; `explain("executionStats")` shows IXSCAN on all three indexed queries; logs bugs here, fixes none | todo |
+| T7 | Frontend API rewrite | frontend-api | T5 | `frontend/src/lib/api.ts`, `frontend/.env.example` | two prefixes, two token keys, one 401 handler per panel; typed fn per contract endpoint; zero `role`; SSR-safe (no bare `localStorage`) | todo |
+| T8 | Demo removal + `/` → login | frontend-cleanup | T7 | every file in the call-site inventory below | `grep -ri demo frontend/src` empty; `tsc --noEmit` + build clean; `/` renders the login form; styling/JSX unchanged | todo |
+| T9 | Documentation | docs | T8 | root `README.md`, `CLAUDE.md` (paths only) | README covers both folders, both env sets, first-run admin setup, dev + test commands | todo |
+| T10 | Final review | reviewer | all | `TASKS.md` | every box below ticked by the reviewer directly | todo |
 
-| # | Frontend today | CLAUDE.md | Resolution |
+## Execution phases
+
+1. T0 alone → verify frontend still runs. 2. T1 alone. 3. **T2 ‖ T3 ‖ T4** concurrent.
+4. T5 alone. 5. T6, looping with T2/T3/T4 owners until green. 6. T7. 7. T8. 8. T9. 9. T10.
+
+---
+
+## Mismatches found in Step 0
+
+The brief listed five "confirmed facts". Three are wrong, and two of the errors
+change the plan. CLAUDE.md still wins on every path, shape, model and security
+decision — these are corrections to the *starting state*, not to the target.
+
+| # | Brief said | Actually | Consequence |
 |---|---|---|---|
-| M1 | `/auth/login`, `/notes`, `/users`, `/posts` — no panel prefix | `/api/user/*` and `/api/admin/*` | CLAUDE.md. Two prefixes |
-| M2 | one token key `inkwell_token` | `user_token` + `admin_token` | CLAUDE.md. Two keys, two sessions |
-| M3 | `User.role: "user" \| "admin"`, plus a role `<select>` in `UserForm` and a Role column in the users table | two collections, no role field, no route that creates an admin | CLAUDE.md. `role` is **removed** from the type, the payload, the form select and the table column — not merely stripped server-side. A picker the backend ignores is a control that silently does nothing |
-| M4 | no admin login, no setup, no admin-prefixed call | admin login + one-time setup | CLAUDE.md. Add both, plus an `/admin/setup` route |
-| M5 | `api.users` → `/users`, colliding with the user panel | `/api/admin/users` | CLAUDE.md |
-| M6 | `api.posts(userId)` → `/users/:id/posts` | user `/api/user/posts/author/:id`, admin `/api/admin/users/:id/posts` | CLAUDE.md. One shared handler behind both |
-| M7 | posts page lists only the signed-in author's posts | `GET /api/user/posts` is a public feed | Page keeps its own-posts view via the by-author route; the feed route exists alongside it |
-| M8 | `demo.workspace()` dumps the whole workspace for the admin overview, and derives 4 stat tiles from it | no such endpoint | Compose the overview from `/admin/users`, `/admin/notes` and `/admin/users/grouped-by-interests`. "Weekly activity" has no backend source and is dropped |
-| M9 | `AuthGuards` reads `demo.session()` and switches on a role | per-panel auth | Two contexts: `AuthContext` (user) and `AdminAuthContext` |
-| M10 | note lists sort by `updatedAt` | sort by `_id` desc, matching `{ owner: 1, _id: -1 }` | CLAUDE.md. Display is unaffected |
-| M11 | one app on `:8080`, user pages link to `/admin/*` | two apps on `:5173`/`:5174`, no link between them | One app, per the brief. Backend still has two routers, two collections, two secrets, two lifetimes. Both CORS values point at `:8080` |
-| M12 | `register.tsx` confirm-password field calls `setPassword`, so the two fields can never disagree | — | Frontend bug that lets a typo through. Fix in T8 |
-| M13 | demo credentials on both login pages (`.demo-credentials` in `styles.css`), a hardcoded `Live demo` pill in `AppShell`, `"Try u-lee"` filter placeholder | no placeholder text anywhere | Removed in T8, including the now-dead CSS rule |
+| M1 | "`api.ts` is dead code — nothing imports it." | `AuthContext.tsx:2` imports five **runtime** values from it (`api`, `clearSession`, `getStoredToken`, `getStoredUser`, `saveSession`), and `AuthProvider` is mounted in `__root.tsx`, so `api.me()` already fires on every page load. Nine more files import its **types**. | T7 cannot treat `api.ts` as greenfield. Rewriting it changes live behaviour in `AuthContext` and breaks 9 type imports, all of which T7/T8 must land together. |
+| M2 | "React + Vite" (CLAUDE.md) / plain SPA (brief) | **TanStack Start**: SSR via nitro, file-based routing (`routeTree.gen.ts` is generated), custom `src/server.ts` SSR error wrapper and `src/start.ts` CSRF middleware. Dev server is port **8080**, not 5173. | Biggest deviation. (a) There is no `ProtectedRoute` — guards are `Protected`/`AdminOnly` in `AuthGuards.tsx`. (b) Every token read must stay SSR-safe (`typeof window === "undefined"` guards) or SSR crashes. (c) `src/routes/index.tsx` **is** the `/` route — see D1. |
+| M3 | Build the backend fresh | A complete **plain-JS** backend is already tracked at `backend/` in `HEAD`, deleted in the working tree, with more WIP on four stale worktree branches. | Requirement is TypeScript, so the JS is reference material, not a base. Preserved as commits `b6ed17a` / `616823e` / `7aafd68`, then the tree is dropped in T0. Its one known defect (B1) carries forward. |
+| M4 | CLAUDE.md: `/user-panel` + `/admin-panel`, two apps | One app with `/admin/*` routes. Brief overrides CLAUDE.md here and says both CORS values may point at the same origin. | CLAUDE.md's repo-layout, port and "user never downloads admin code" claims become inaccurate; T9 corrects the paths. Both token keys share one origin's `localStorage`, which is exactly why two distinct keys are needed. |
+| M5 | — | CLAUDE.md's `GET /api/user/posts` is a **public feed of all posts**; the current `/posts` page shows only the signed-in user's own posts, and `admin.users.tsx` links to `/posts?userId=…` where CLAUDE.md defines `/posts/author/:id`. | T8 wires no-`userId` → feed, `?userId=` → by-author. Composer stays. |
+| M6 | — | No local `mongod` binary. `fastdl.mongodb.org` and the npm registry are both reachable. | T6 and T10's end-to-end trace both run against `mongodb-memory-server`, not a live server. |
 
-## Demo call sites (Step 0.5 inventory)
+## Decisions taken (flagged for the user)
 
-28 calls across 15 files. 19 distinct demo functions. `src/lib/demo.ts` itself
-is deleted once nothing imports it.
+- **D1 — `src/routes/index.tsx` cannot simply be deleted.** In TanStack Start's
+  file-based router that file *is* the `/` route; with it gone, `/` 404s, which
+  contradicts "`/` renders the login page". The brief anticipated this and allowed
+  a thin physical file. Taken: `login.tsx`'s markup moves into a `LoginPage`
+  component, and both `index.tsx` and `login.tsx` render it — so `/` shows the real
+  login form (not a redirect), with no duplicated JSX. The old landing-page content
+  is deleted. `DONE WHEN: src/routes/index.tsx is gone` is therefore met in spirit,
+  not literally: the file exists at 3 lines. Say the word if you want a hard
+  redirect instead.
+- **D2 — T0 runs in the main tree, not a worktree.** It is a ~100-file `git mv`
+  that runs alone in its phase, so a worktree buys no isolation and makes every
+  later branch conflict. Worktree-per-agent resumes from T1.
+- **D3 — `register.tsx` does not collect interests**, which CLAUDE.md's register
+  body requires. Sending `[]` and leaving the form alone (styling is out of scope
+  for T8).
+- **D4 — `admin.overview.tsx` is built from `demo.workspace()`**, a whole fake
+  database with no backend equivalent. Rewired to real totals from the paginated
+  user/note endpoints rather than deleted, since it is the admin landing route.
 
-| File | Calls | Replaced by |
+## Demo call-site inventory (input to T8)
+
+`src/lib/demo.ts` — **delete** once the 12 files below are clear. `src/lib/api.ts` is
+rewritten by T7.
+
+| File | demo calls | Notes |
 |---|---|---|
-| `components/AuthGuards.tsx` | `session` | both auth contexts |
-| `components/AppShell.tsx` | `logout` x2 | `logout` from the matching context |
-| `routes/login.tsx` | `login` | `userApi.login` |
-| `routes/register.tsx` | `register` | `userApi.register` |
-| `routes/notes.tsx` | `notes`, `deleteNote` | `userApi.notes`, `userApi.deleteNote` |
-| `routes/notes.new.tsx` | `createNote` | `userApi.createNote` |
-| `routes/notes.$id.edit.tsx` | `note`, `updateNote` | `userApi.note`, `userApi.updateNote` |
-| `routes/posts.tsx` | `posts`, `createPost` | `userApi.postsByAuthor`, `userApi.createPost` |
-| `routes/admin.login.tsx` | `login` | `adminApi.login` |
-| `routes/admin.overview.tsx` | `workspace` | three real calls (see M8) |
-| `routes/admin.users.tsx` | `users`, `deleteUser` | `adminApi.users`, `adminApi.deleteUser` |
-| `routes/admin.users.new.tsx` | `createUser` | `adminApi.createUser` |
-| `routes/admin.users.$id.edit.tsx` | `user`, `updateUser` | `adminApi.user`, `adminApi.updateUser` |
-| `routes/admin.notes.tsx` | `allNotes` | `adminApi.notes` |
-| `routes/admin.interests.tsx` | `interests` | `adminApi.interests` |
+| `components/AppShell.tsx` | `demo.logout()` ×2, `useDemoUser()` | also drop the "Live demo" status pill |
+| `components/AuthGuards.tsx` | `demo.session()`, `useDemoUser` export | rename to `useCurrentUser`; drop `role` gate in favour of per-panel token |
+| `components/UserForm.tsx` | — | drop the **role picker** and `role` from `UserPayload` |
+| `routes/index.tsx` | — | deleted per D1 |
+| `routes/login.tsx` | `demo.login(…, "user")` | drop seeded `lee@inkwell.demo` / `member123` + `.demo-credentials` block |
+| `routes/admin.login.tsx` | `demo.login(…, "admin")` | drop seeded `ada@inkwell.demo` / `admin123` + credentials block |
+| `routes/register.tsx` | `demo.register` | see D3; also bug B2 |
+| `routes/notes.tsx` | `demo.notes`, `demo.deleteNote` | |
+| `routes/notes.new.tsx` | `demo.createNote` | |
+| `routes/notes.$id.edit.tsx` | `demo.note`, `demo.updateNote` | |
+| `routes/posts.tsx` | `demo.posts`, `demo.createPost`, `useDemoUser` | see M5 |
+| `routes/admin.users.tsx` | `demo.users`, `demo.deleteUser` | drop the Role column and the "demo owner" guard |
+| `routes/admin.users.new.tsx` | `demo.createUser` | |
+| `routes/admin.users.$id.edit.tsx` | `demo.user`, `demo.updateUser` | |
+| `routes/admin.notes.tsx` | `demo.allNotes` | drop the `"Try u-lee"` placeholder |
+| `routes/admin.interests.tsx` | `demo.interests` | |
+| `routes/admin.overview.tsx` | `demo.workspace`, `DemoWorkspace`, `role === "user"` | see D4 |
 
-Non-call `demo` references to clear as well: `styles.css` `.demo-credentials`,
-the `Live demo` pill in `AppShell.tsx`, and the demo-credential blocks plus
-prefilled demo emails and passwords in `login.tsx` and `admin.login.tsx`.
-
-## Tasks
-
-| ID | Title | Owner | Depends on | Status |
-|---|---|---|---|---|
-| T1 | Foundation | foundation | — | review (merged, awaiting T9) |
-| T2 | User API | user-api | T1 | doing |
-| T3 | Admin API | admin-api | T1 | doing |
-| T4 | Aggregations | aggregation | T1 | doing |
-| T5 | Backend security & lean pass | backend-reviewer | T2, T3, T4 | todo |
-| T6 | Backend tests + explain report | tester | T5 | todo |
-| T7 | Frontend API rewrite | frontend-api | T5 | todo |
-| T8 | Frontend demo removal | frontend-cleanup | T7 | todo |
-| T9 | Final review + README | reviewer | all | todo |
-
-### T1 Foundation — branch `feat/foundation`
-Files: `backend/package.json`, `backend/.env.example`, `backend/src/config/db.js`,
-`backend/src/app.js`, `backend/src/server.js`,
-`backend/src/middleware/{authUser,authAdmin,error,validate,rateLimit}.js`,
-`backend/src/utils/{asyncHandler,paginate,token,password}.js`,
-`backend/src/models/{User,Admin,Note,Post,SetupLock}.js`,
-`backend/src/routes/{user,admin}/index.js` (empty routers).
-
-Contract the other agents code against:
-- `asyncHandler(fn)` → wrapped handler.
-- `paginate(req)` → `{ page, limit, skip }`. Default limit 10, max 50, min page 1.
-- `signUserToken(id)` / `signAdminToken(id)`; verification pins `algorithms: ["HS256"]`.
-- `authUser` sets `req.user`, `authAdmin` sets `req.admin`, both loaded by `_id` so a deleted account loses access at once.
-- `validate(schema)` parses `req.body`, strips unknown keys, replaces `req.body`, 400 on failure.
-- `DUMMY_PASSWORD_HASH` from `utils/password.js` for the constant-time login path.
-- Rate limiters live in `middleware/rateLimit.js` and are applied in `app.js` on the exact login, register and setup paths, so a route file cannot forget one.
-- Password hashing is a pre-save hook on `User` and `Admin` (12 rounds, only when modified), so no controller can skip it.
-
-Acceptance: `node --check` on every file; exactly 3 `schema.index(` calls and no `index: true` / `unique: true` in any model; no unused dependency; `app.js` exports the app without listening.
-
-### T2 User API — branch `feat/user-api`
-Files: `backend/src/routes/user/{index,auth,notes,posts}.js`, `backend/src/controllers/{userAuthController,noteController,postController}.js`, `backend/src/validators/user.js`.
-Acceptance: paths and shapes match the contract; ownership enforced inside the query filter; invalid ObjectId → 404 with no DB call; one generic login message with a dummy compare on unknown email; every write route zod-validated.
-
-### T3 Admin API — branch `feat/admin-api`
-Files: `backend/src/routes/admin/{index,setup,auth,users,notes}.js`, `backend/src/controllers/{setupController,adminAuthController,adminUserController,adminNoteController}.js`, `backend/src/validators/admin.js`.
-Acceptance: setup succeeds once then 404s; wrong key → 403 via `timingSafeEqual`; `grouped-by-interests` registered before `/users/:id`; deleting a user removes their notes and posts.
-
-### T4 Aggregations — branch `feat/aggregation`
-Files: `backend/src/controllers/aggregationController.js` only.
-Acceptance: exactly one `aggregate(` per handler; interests shape `{ data: [{ interest, count, users }] }`; `postsByAuthor` casts with `new mongoose.Types.ObjectId`, uses `$lookup` with `let`+`pipeline` and a `$facet`, and 404s on a missing user.
-
-### T5 Backend security & lean pass — branch `chore/backend-review`
-Walks the CLAUDE.md security checklist line by line, strips dead code, unused deps and surplus comments. Reports findings; does not redesign.
-
-### T6 Backend tests + explain report — branch `test/backend`
-Files: `backend/tests/**`, `backend/vitest.config.js`, `docs/explain-report.md`. Adds vitest, supertest and mongodb-memory-server plus the `test` script. Does **not** fix source; logs bugs in the table below.
-
-### T7 Frontend API rewrite — branch `feat/frontend-api`
-Files: `src/lib/api.ts`, `.env.example`. Rewritten from scratch: two prefixes, two token keys, one 401 interceptor per panel redirecting to that panel's login, typed functions for every endpoint, no `role` anywhere.
-
-### T8 Frontend demo removal — branch `chore/frontend-cleanup`
-Every call site in the inventory above rewired; `src/lib/demo.ts` deleted; role picker and placeholder text removed; JSX, layout, classNames and styling otherwise untouched.
-
-### T9 Final review + README — branch `chore/review`
-`grep -ri demo src/` empty, clean build, one full flow traced against CLAUDE.md, every Definition-of-done item checked, README written. Only this agent flips statuses to `done`.
+Type-only importers of `api.ts` that T7 must keep compiling: `components/{Pagination,Notes,UserForm,AuthGuards}.tsx`,
+`context/AuthContext.tsx`, `routes/{notes,posts,admin.notes,admin.users,admin.users.$id.edit}.tsx`.
 
 ## Bugs
 
 | # | Task | Description | Found by | Fixed by | Status |
 |---|---|---|---|---|---|
-| B1 | T5 | Rate limiters are registered in `app.js` before the per-router CORS middleware, so a 429 response carries no `Access-Control-Allow-Origin` header. The browser then reports a network failure (`api.ts` turns it into "Unable to reach the API") instead of surfacing the throttle message. Move the limiters after the CORS middleware, or apply CORS before them. | orchestrator | T5 | open |
+| B1 | T1 | Rate limiters registered before the per-router CORS middleware, so a 429 carries no `Access-Control-Allow-Origin` and the browser reports a network failure instead of the throttle message. Carried forward from the legacy JS backend (commit `b7e11b0`); the TypeScript rewrite must not reintroduce it. Repro: exceed the login limiter from the browser, observe a network error rather than a 429 body. | orchestrator (read of legacy `app.js`) | T1 | open |
+| B2 | T8 | `frontend/src/routes/register.tsx:9` — the "Confirm password" field's `onChange` calls `setPassword`, not `setConfirmPassword`, so `confirmPassword` stays `""` and the mismatch check is unreachable. Repro: register with two different passwords → accepted. | orchestrator (read of `register.tsx`) | T8 | open |
+
+## Definition of done (T10 ticks these directly)
+
+- [ ] Repo root has `/frontend` and `/backend` as siblings, nothing cross-contaminated
+- [ ] `/` renders the login page; no landing page remains (D1)
+- [ ] A user token is rejected by every admin route, and an admin token by every user route
+- [ ] Setup route creates the admin once, then 404s
+- [ ] Every list route paginated, default limit 10, max 50
+- [ ] Exactly the 3 CLAUDE.md indexes exist, all via `schema.index()`
+- [ ] Both aggregation scenarios use a single `aggregate()` call
+- [ ] `tsc --noEmit` clean in `/backend`
+- [ ] `npm test` green in `/backend`
+- [ ] `grep -ri demo frontend/src` returns nothing
+- [ ] Query plans show IXSCAN where an index is expected
+- [ ] README explains setup, env variables, and first-time admin setup

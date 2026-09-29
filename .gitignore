@@ -40,3 +40,6 @@ package-lock.json
 .env
 .env.*
 !.env.example
+
+# Build output
+.output
