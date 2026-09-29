@@ -29,6 +29,12 @@ export const createApp = (): Express => {
   app.use(helmet());
   app.use(express.json({ limit: "10kb" }));
 
+  // Outside both panel routers: no auth, no rate limit, and no panel CORS, since
+  // this is for uptime probes rather than browser code.
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   app.use(
     "/api/user",
     panel(
