@@ -1,57 +1,39 @@
-# CipherNote
+# CipherNote API
 
-A secure note-taking workspace with two separate panels sharing one backend:
-a member notebook for writing private notes and a public posts feed, and an
-administrator console for managing people and reviewing everything they write.
+Express + Mongoose REST API for a note-taking workspace with two independent
+panels: a user panel for private notes and a shared posts feed, and an admin
+panel for managing users and reviewing their content.
 
 Author: [mhrrony.com](https://mhrrony.com)
 
-## Repo layout
+## Panel separation
 
-```
-/backend    Express + Mongoose API (TypeScript), serves both panels
-/frontend   TanStack Start (React + TypeScript + Tailwind), one app, both panels
-```
+Each panel has its own accounts, routes, JWT secret, and token lifetime. A user
+token is rejected on every admin route and an admin token on every user route —
+the secrets differ, so rejection is structural, not a role check.
 
-The user panel and the admin panel are routes inside the one frontend app
-(`/...` and `/admin/...`), not separate builds. They share no session: each
-panel keeps its own token, its own login page, and its own account collection
-on the backend. A user token is rejected on every admin route and an admin
-token is rejected on every user route.
-
-## What's inside
-
-**Member area** — private notes with a simple editor, and a public posts
-feed everyone shares. A member only ever sees their own notes.
-
-**Administrator console** — a collapsible sidebar shell over people
-management, an all-notes view filterable by user, a per-member posts view,
-and an interests breakdown that groups members by the topics they picked.
-
-## Stack
-
-| Part | Backend | Frontend |
+| | User panel | Admin panel |
 |---|---|---|
-| Language | TypeScript (ES modules) | TypeScript |
-| Framework | Express 5 | React 19 + TanStack Start (SSR) |
-| Data | MongoDB + Mongoose | TanStack Router (file-based), TanStack Query |
-| Validation | zod | plain `useState` forms, no client-side schema validation |
-| Auth | JWT (jsonwebtoken), one secret per panel | Bearer token per panel in `localStorage` |
-| Security | helmet, cors, express-rate-limit, bcryptjs | — |
-| Styling | — | Tailwind CSS 4, dark Notion-style theme |
-| Build/test | tsc, vitest + supertest + mongodb-memory-server | Vite 8 |
+| Collection | `users` | `admins` |
+| Prefix | `/api/user` | `/api/admin` |
+| Sign up | `POST /api/user/auth/register` | none — one admin, created by setup |
+| JWT secret | `USER_JWT_SECRET` | `ADMIN_JWT_SECRET` |
+| Token lifetime | 1 day | 2 hours |
+| CORS origin | `USER_PANEL_URL` | `ADMIN_PANEL_URL` |
 
-## Getting started
+Auth middleware loads the account by `_id` on every request, so a deleted
+account loses access immediately. The admin owns no notes.
 
-Requires Node.js and a way to run MongoDB (a local `mongod`, Atlas, or let the
-test suite spin up its own in-memory instance — see Testing below).
+## Setup
 
-### 1. Backend
+Requires Node.js and MongoDB (local `mongod` or Atlas — the test suite spins up
+its own in-memory instance).
 
 ```sh
 cd backend
 npm install
 cp .env.example .env
+npm run dev
 ```
 
 Fill in `.env`:
@@ -66,41 +48,121 @@ ADMIN_PANEL_URL=http://localhost:8080
 ADMIN_SETUP_KEY=<long random value>
 ```
 
-Both panel URLs point at the same origin, since the two panels are routes in
-one frontend app running on port 8080. Never commit `.env`.
+Both panel URLs point at the same origin because both panels are served from one
+frontend app. That is why the two JWT secrets must stay distinct — a shared
+origin means a shared `localStorage`.
 
-```sh
-npm run dev
+## First-time admin setup
+
+The workspace starts with no admin. `GET /api/admin/setup/status` returns
+`{ required: true }` until one exists, and `POST /api/admin/setup` creates it
+given a matching `ADMIN_SETUP_KEY`. After that the route returns 404 permanently.
+
+The claim is guarded by a `SetupLock` document with `_id: "admin"`, inserted
+before the admin is created — a duplicate key error means setup already ran, so
+two concurrent requests cannot both succeed. If admin creation then fails, the
+lock is rolled back. The setup key is compared with `crypto.timingSafeEqual`
+over SHA-256 digests; a wrong key returns 403.
+
+There is no seed script and no demo data.
+
+## API
+
+### User panel
+
+| Method | Path | Access |
+|---|---|---|
+| POST | `/api/user/auth/register` | public |
+| POST | `/api/user/auth/login` | public |
+| GET | `/api/user/auth/me` | user |
+| GET | `/api/user/notes?page&limit` | user — own notes only |
+| POST | `/api/user/notes` | user |
+| GET | `/api/user/notes/:id` | user — own note only |
+| PUT | `/api/user/notes/:id` | user |
+| DELETE | `/api/user/notes/:id` | user |
+| GET | `/api/user/posts?page&limit` | user — public feed, newest first |
+| POST | `/api/user/posts` | user |
+
+### Admin panel
+
+| Method | Path | Access |
+|---|---|---|
+| GET | `/api/admin/setup/status` | public |
+| POST | `/api/admin/setup` | public, one time |
+| POST | `/api/admin/auth/login` | public |
+| GET | `/api/admin/auth/me` | admin |
+| GET | `/api/admin/users?page&limit` | admin |
+| POST | `/api/admin/users` | admin |
+| GET | `/api/admin/users/grouped-by-interests` | admin |
+| GET | `/api/admin/users/:id` | admin |
+| PUT | `/api/admin/users/:id` | admin — password optional |
+| DELETE | `/api/admin/users/:id` | admin — cascades to notes and posts |
+| GET | `/api/admin/users/:id/posts?page&limit` | admin |
+| GET | `/api/admin/notes?page&limit&userId` | admin — `userId` optional |
+
+### Shapes
+
+```
+Paginated: { data: [], pagination: { page, limit, total, totalPages } }
+Note:  { _id, title, content, owner, createdAt, updatedAt }
+User:  { _id, name, email, interests, createdAt }
+Admin: { _id, name, email, createdAt }
+Post:  { _id, title, body, author, createdAt }
 ```
 
-The API listens on `http://localhost:5005`.
+Default `limit` is 10, maximum 50. Errors are `{ message }`. An invalid
+ObjectId in a route param returns 404 with no database call, and a user
+requesting another user's note gets 404 rather than 403.
 
-### 2. Frontend
+## Indexes
+
+Three, all declared with `schema.index()` — no `index: true`, no `unique: true`
+on a field.
+
+| Model | Index | Supports |
+|---|---|---|
+| User | `{ email: 1 }` unique | login, duplicate email check |
+| Note | `{ owner: 1, _id: -1 }` | user's notes, admin filter by user, cascade delete |
+| Post | `{ author: 1, _id: -1 }` | posts of one author in the lookup, cascade delete |
+
+Nothing else is indexed. Every list sorts by `_id` descending and get-by-id
+routes use the default `_id` index, which covers the admin user list, the
+all-notes list, the post feed, and `SetupLock`. The `admins` collection holds
+one document. The interests aggregation reads every user, so an index on
+`interests` does not help it and none is defined.
+
+## Aggregations
+
+Both are a single `User.aggregate()` call.
+
+**Users grouped by interests** — `$unwind` interests, `$group` by interest
+counting and pushing members, `$sort` by count then name, `$project` to rename
+`_id`.
+
+**Posts of one user** — `$match` the cast user `_id`, then `$lookup` from
+`posts` with a `$facet` splitting a sorted/skipped/limited `data` branch from a
+`$count` total.
+
+## Testing
 
 ```sh
-cd frontend
-npm install
-cp .env.example .env
-npm run dev
+npm test         # vitest, in-memory MongoDB — never touches MONGO_URI
+npm run typecheck
 ```
 
-The app listens on `http://localhost:8080`.
+Covers registration and login, cross-panel token rejection, note ownership and
+invalid-id 404s, pagination defaults and the 50 cap, one-time setup and
+wrong-key rejection, passwords never appearing in a response, both
+aggregations, and the delete-user cascade.
 
-### 3. First-time admin setup
+`tests/explain.ts` is a standalone script that seeds a small dataset and prints
+`explain("executionStats")` for every indexed query, confirming `IXSCAN`:
 
-The workspace starts with no administrator account. Open
-`http://localhost:8080/admin/login` — since no admin exists yet, it redirects
-to `/admin/setup`. Fill in a name, email, password, and the `ADMIN_SETUP_KEY`
-from the backend's `.env`. This creates the one administrator account and logs
-you in. After that, `POST /api/admin/setup` returns 404 and `/admin/setup`
-redirects straight back to `/admin/login` — there is no way to create a second
-admin from the UI.
-
-There is no seed script and no demo data anywhere in the app.
+```sh
+npx tsx tests/explain.ts
+```
 
 ## Commands
-
-Backend, inside `/backend`:
 
 | Command | Does |
 |---|---|
@@ -108,83 +170,37 @@ Backend, inside `/backend`:
 | `npm run build` | Compiles to `dist/` |
 | `npm start` | Runs the compiled build |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Runs the vitest suite against an in-memory MongoDB |
+| `npm test` | vitest suite |
 
-Frontend, inside `/frontend`:
-
-| Command | Does |
-|---|---|
-| `npm run dev` | Dev server on port 8080 |
-| `npm run build` | Production build |
-| `npm run build:dev` | Production build in development mode |
-| `npm run preview` | Preview a production build locally |
-| `npm run lint` | ESLint over the repo |
-| `npm run format` | `prettier --write .` |
-
-## Testing
-
-Backend tests (`backend/tests/`) use `mongodb-memory-server`, so `npm test`
-needs no local `mongod` and never touches the database in `MONGO_URI`. They
-cover registration/login, cross-panel token rejection, note ownership and
-404s on an invalid id, pagination defaults and the 50-item cap, one-time admin
-setup, wrong-setup-key rejection, password fields never leaking into a
-response, both aggregation endpoints, and the delete-user cascade to notes and
-posts.
-
-`backend/tests/explain.ts` is a standalone script (not part of the vitest
-run) that seeds a small dataset and prints `explain("executionStats")` for
-every indexed query. Regenerate `docs/explain-report.md` with:
-
-```sh
-cd backend
-npx tsx tests/explain.ts
-```
-
-## Environment reference
-
-`/backend/.env` — see the setup section above for the full list.
-
-`/frontend/.env`
-
-```
-VITE_API_URL=http://localhost:5005/api
-```
-
-## Project structure
+## Structure
 
 ```
 backend/src
-  app.ts             creates and configures the Express app (no listen call)
-  server.ts          boots the app: connects Mongo, then listens
+  app.ts             builds and configures the Express app (no listen call)
+  server.ts          connects Mongo, then listens
   config/db.ts       Mongoose connection
-  models/            User, Admin, Note, Post, SetupLock — 3 indexes total
+  models/            User, Admin, Note, Post, SetupLock
   middleware/        authUser, authAdmin, validate, rateLimit, error
   routes/user/       /api/user/{auth,notes,posts}
   routes/admin/      /api/admin/{setup,auth,users,notes}
   controllers/       one file per resource
   validators/        zod schemas, one per write route
   utils/             asyncHandler, httpError, objectId, paginate, password, token
-  types/express.d.ts augments Express's Request with the authenticated user/admin
-
-frontend/src
-  routes/            file-based routes; routeTree.gen.ts is generated
-  components/        AppShell, AuthGuards, LoginPage, Notes, Forms, UserForm, Pagination
-  context/           AuthContext — a user session and an admin session, independently
-  lib/               api.ts (userApi, adminApi — one typed REST client per panel),
-                     error-capture.ts + error-page.ts (SSR error recovery)
-  styles.css         theme tokens and layout
+  types/express.d.ts augments Request with the authenticated user/admin
 ```
 
-## Security notes
+## Security
 
-- Passwords are hashed with bcrypt (12 rounds) and never selected by default.
-  Login takes the same amount of time whether the email exists or not, so an
-  attacker can't tell which emails are registered by measuring response speed.
-- Each panel has its own JWT secret pinned to `HS256`, so a token from one
-  panel is structurally rejected by the other, not just by a role check.
-- CORS is scoped per panel to its own origin; rate limits sit behind CORS so a
-  429 still carries the right headers instead of surfacing as a network error.
-- Every write route validates with zod and strips unknown keys — a request
-  body can't smuggle in fields like an id or a role.
-- Route guards in the frontend (`Protected`, `AdminOnly`) shape the UI only.
-  Authorization is enforced by the API.
+- bcrypt at 12 rounds; `password` uses `select: false` and is never returned.
+- Login returns one message for a wrong email and a wrong password, and runs a
+  bcrypt compare against a fixed dummy hash when the email does not exist, so
+  response time does not reveal which emails are registered.
+- JWTs pinned to `HS256` on verify, with an expiry set per panel.
+- Note ownership is enforced in the query filter (`{ _id, owner }`), not after
+  the fetch.
+- zod on every write route with unknown keys stripped, so a body cannot smuggle
+  in an id or a role.
+- helmet, `x-powered-by` off, 10kb JSON body limit.
+- CORS is registered per panel ahead of the rate limiters, so a 429 still
+  carries `Access-Control-Allow-Origin` instead of surfacing as a network error.
+- Rate limits on user login, register, admin login, and setup.
