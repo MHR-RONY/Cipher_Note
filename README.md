@@ -1,114 +1,204 @@
 # CipherNote
 
-A secure note-taking workspace with two separate areas: a member notebook for
-writing private notes and public posts, and an administrator console for
-managing people and reviewing everything they write.
+A secure note-taking workspace with two separate panels sharing one backend:
+a member notebook for writing private notes and a public posts feed, and an
+administrator console for managing people and reviewing everything they write.
 
 Author: [mhrrony.com](https://mhrrony.com)
 
+## Repo layout
+
+```
+/backend    Express + Mongoose API (TypeScript), serves both panels
+/frontend   TanStack Start (React + TypeScript + Tailwind), one app, both panels
+```
+
+The user panel and the admin panel are routes inside the one frontend app
+(`/...` and `/admin/...`), not separate builds. They share no session: each
+panel keeps its own token, its own login page, and its own account collection
+on the backend. A user token is rejected on every admin route and an admin
+token is rejected on every user route.
+
 ## What's inside
 
-**Member area** — private notes with a borderless editor, a public posts feed,
-and per-author post views. A member only ever sees their own notes.
+**Member area** — private notes with a simple editor, and a public posts
+feed everyone shares. A member only ever sees their own notes.
 
-**Administrator console** — a collapsible sidebar shell over people management,
-an all-notes view filterable by user, and an interests breakdown that groups
-members by the topics they picked.
-
-The two areas have their own sign-in pages, their own shell, and their own
-navigation. Nothing in the member area links into the admin area.
+**Administrator console** — a collapsible sidebar shell over people
+management, an all-notes view filterable by user, a per-member posts view,
+and an interests breakdown that groups members by the topics they picked.
 
 ## Stack
 
-| Part            | Choice                                           |
-| --------------- | ------------------------------------------------ |
-| Framework       | React 19 + TanStack Start (SSR)                  |
-| Routing         | TanStack Router, file-based                      |
-| Data fetching   | TanStack Query                                   |
-| Styling         | Tailwind CSS 4, dark Notion-style theme          |
-| Components      | Radix UI primitives, lucide icons, sonner toasts |
-| Validation      | zod + react-hook-form                            |
-| Build           | Vite 8, TypeScript                               |
-| Package manager | bun                                              |
+| Part | Backend | Frontend |
+|---|---|---|
+| Language | TypeScript (ES modules) | TypeScript |
+| Framework | Express 5 | React 19 + TanStack Start (SSR) |
+| Data | MongoDB + Mongoose | TanStack Router (file-based), TanStack Query |
+| Validation | zod | plain `useState` forms, no client-side schema validation |
+| Auth | JWT (jsonwebtoken), one secret per panel | Bearer token per panel in `localStorage` |
+| Security | helmet, cors, express-rate-limit, bcryptjs | — |
+| Styling | — | Tailwind CSS 4, dark Notion-style theme |
+| Build/test | tsc, vitest + supertest + mongodb-memory-server | Vite 8 |
 
-## Quick start
+## Getting started
+
+Requires Node.js and a way to run MongoDB (a local `mongod`, Atlas, or let the
+test suite spin up its own in-memory instance — see Testing below).
+
+### 1. Backend
 
 ```sh
-git clone https://github.com/MHR-RONY/Cipher_Note.git
-cd Cipher_Note
-bun install
-bun run dev
+cd backend
+npm install
+cp .env.example .env
 ```
 
-The dev server listens on [http://localhost:8080](http://localhost:8080).
-
-`npm install && npm run dev` works too, but `bun.lock` is the committed
-lockfile and `bunfig.toml` carries a supply-chain guard that only bun reads.
-
-## Environment
-
-Create `.env` in the project root:
+Fill in `.env`:
 
 ```
-VITE_API_URL=http://localhost:5000/api
+PORT=5005
+MONGO_URI=mongodb://localhost:27017/secure-notes
+USER_JWT_SECRET=<long random value>
+ADMIN_JWT_SECRET=<long random value>
+USER_PANEL_URL=http://localhost:8080
+ADMIN_PANEL_URL=http://localhost:8080
+ADMIN_SETUP_KEY=<long random value>
 ```
 
-It defaults to `http://localhost:5000/api` when unset.
+Both panel URLs point at the same origin, since the two panels are routes in
+one frontend app running on port 8080. Never commit `.env`.
 
-## Scripts
+```sh
+npm run dev
+```
 
-| Command           | Does                       |
-| ----------------- | -------------------------- |
-| `bun run dev`     | Dev server on port 8080    |
-| `bun run build`   | Production build           |
-| `bun run preview` | Serve the production build |
-| `bun run lint`    | ESLint over the repo       |
-| `bun run format`  | Prettier write             |
+The API listens on `http://localhost:5005`.
 
-## Routes
+### 2. Frontend
 
-| Path                                        | Area   | Page                        |
-| ------------------------------------------- | ------ | --------------------------- |
-| `/`                                         | public | Landing page, pick an area  |
-| `/login`, `/register`                       | public | Member sign in and sign up  |
-| `/notes`                                    | member | Own notes, paginated        |
-| `/notes/new`, `/notes/:id/edit`             | member | Note editor                 |
-| `/posts`                                    | member | Public feed and create form |
-| `/posts?userId=:id`                         | member | Posts by one author         |
-| `/admin/login`                              | public | Administrator sign in       |
-| `/admin/overview`                           | admin  | Workspace summary           |
-| `/admin/users`                              | admin  | People list, paginated      |
-| `/admin/users/new`, `/admin/users/:id/edit` | admin  | Member forms                |
-| `/admin/notes`                              | admin  | All notes, filter by member |
-| `/admin/interests`                          | admin  | Members grouped by interest |
+```sh
+cd frontend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+The app listens on `http://localhost:8080`.
+
+### 3. First-time admin setup
+
+The workspace starts with no administrator account. Open
+`http://localhost:8080/admin/login` — since no admin exists yet, it redirects
+to `/admin/setup`. Fill in a name, email, password, and the `ADMIN_SETUP_KEY`
+from the backend's `.env`. This creates the one administrator account and logs
+you in. After that, `POST /api/admin/setup` returns 404 and `/admin/setup`
+redirects straight back to `/admin/login` — there is no way to create a second
+admin from the UI.
+
+There is no seed script and no demo data anywhere in the app.
+
+## Commands
+
+Backend, inside `/backend`:
+
+| Command | Does |
+|---|---|
+| `npm run dev` | API on port 5005, restarts on change |
+| `npm run build` | Compiles to `dist/` |
+| `npm start` | Runs the compiled build |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Runs the vitest suite against an in-memory MongoDB |
+
+Frontend, inside `/frontend`:
+
+| Command | Does |
+|---|---|
+| `npm run dev` | Dev server on port 8080 |
+| `npm run build` | Production build |
+| `npm run build:dev` | Production build in development mode |
+| `npm run preview` | Preview a production build locally |
+| `npm run lint` | ESLint over the repo |
+| `npm run format` | `prettier --write .` |
+
+## Testing
+
+Backend tests (`backend/tests/`) use `mongodb-memory-server`, so `npm test`
+needs no local `mongod` and never touches the database in `MONGO_URI`. They
+cover registration/login, cross-panel token rejection, note ownership and
+404s on an invalid id, pagination defaults and the 50-item cap, one-time admin
+setup, wrong-setup-key rejection, password fields never leaking into a
+response, both aggregation endpoints, and the delete-user cascade to notes and
+posts.
+
+`backend/tests/explain.ts` is a standalone script (not part of the vitest
+run) that seeds a small dataset and prints `explain("executionStats")` for
+every indexed query. Regenerate `docs/explain-report.md` with:
+
+```sh
+cd backend
+npx tsx tests/explain.ts
+```
+
+## Environment reference
+
+`/backend/.env` — see the setup section above for the full list.
+
+`/frontend/.env`
+
+```
+VITE_API_URL=http://localhost:5005/api
+```
 
 ## Project structure
 
 ```
-src
-  routes/          file-based routes; routeTree.gen.ts is generated
-  components/      AppShell, AuthGuards, Notes, Forms, Pagination
-  components/ui/   Radix-based primitives
-  context/         AuthContext (account, token, loading)
-  lib/api.ts       REST client, bearer auth, 401 handling
-  server.ts        SSR entry with an error boundary
-  start.ts         request middleware, CSRF for server functions
-  styles.css       theme tokens and layout
+backend/src
+  app.ts             creates and configures the Express app (no listen call)
+  server.ts          boots the app: connects Mongo, then listens
+  config/db.ts       Mongoose connection
+  models/            User, Admin, Note, Post, SetupLock — 3 indexes total
+  middleware/        authUser, authAdmin, validate, rateLimit, error
+  routes/user/       /api/user/{auth,notes,posts}
+  routes/admin/      /api/admin/{setup,auth,users,notes}
+  controllers/       one file per resource
+  validators/        zod schemas, one per write route
+  utils/             asyncHandler, httpError, objectId, paginate, password, token
+  types/express.d.ts augments Express's Request with the authenticated user/admin
+
+frontend/src
+  routes/            file-based routes; routeTree.gen.ts is generated
+  components/        AppShell, AuthGuards, LoginPage, Notes, Forms, UserForm, Pagination
+  components/ui/     Radix-based primitives (shadcn scaffolding; not all of it is wired up)
+  context/           AuthContext — a user session and an admin session, independently
+  lib/               api.ts (userApi, adminApi — one typed REST client per panel),
+                     error-capture.ts + error-page.ts (SSR error recovery), utils.ts
+  styles.css         theme tokens and layout
 ```
-
-## Data layer
-
-`src/lib/api.ts` is the client for the backend API. It attaches
-`Authorization: Bearer <token>`, and on a 401 it clears the stored session and
-sends the visitor back to `/login`. `AuthContext` restores a session on load by
-calling `/auth/me`.
 
 ## Security notes
 
-- Server functions sit behind CSRF middleware (`src/start.ts`).
-- SSR failures render an error page instead of leaking a stack trace.
-- `bunfig.toml` skips package versions published in the last 24 hours.
-- Write forms validate with zod before anything is sent.
+- Passwords are hashed with bcrypt (12 rounds) and never selected by default;
+  the two login paths run a dummy bcrypt compare against a missing account so
+  a wrong password and an unknown email look the same from the outside.
+- Each panel has its own JWT secret pinned to `HS256`, so a token from one
+  panel is structurally rejected by the other, not just by a role check.
+- CORS is scoped per panel to its own origin; rate limits sit behind CORS so a
+  429 still carries the right headers instead of surfacing as a network error.
+- Every write route validates with zod and strips unknown keys — a request
+  body can't smuggle in fields like an id or a role.
+- Route guards in the frontend (`Protected`, `AdminOnly`) shape the UI only.
+  Authorization is enforced by the API.
 
-Route guards run in the browser, so they shape the experience rather than
-enforce access. Authorization belongs to the API.
+## Known dead code
+
+- `GET /api/user/posts/author/:id` and the matching `userApi.postsByAuthor`
+  client method exist and are covered by a backend test, but no frontend
+  route or component calls them — the member posts feed (`posts.tsx`) shows
+  everyone's posts, not one author's. The admin's per-member posts view
+  (`admin.users.$id.posts.tsx`) uses a separate, actually-wired-up endpoint
+  (`adminApi.userPosts` → `/api/admin/users/:id/posts`).
+- `frontend/src/components/ui/` is shadcn-style scaffolding; not all of it is
+  imported anywhere. `react-hook-form` and `@hookform/resolvers` are
+  dependencies but unused outside that scaffolding — every real form in the
+  app is plain `useState`.
