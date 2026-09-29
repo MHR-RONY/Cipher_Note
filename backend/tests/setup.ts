@@ -1,6 +1,7 @@
 import { MongoMemoryServer } from "mongodb-memory-server";
 import mongoose from "mongoose";
 import { afterAll, afterEach, beforeAll } from "vitest";
+import { resetLimiters } from "../src/middleware/rateLimit.js";
 
 process.env["USER_JWT_SECRET"] ??= "test-user-secret";
 process.env["ADMIN_JWT_SECRET"] ??= "test-admin-secret";
@@ -17,6 +18,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterEach(async () => {
+  resetLimiters();
   const { collections } = mongoose.connection;
   await Promise.all(Object.values(collections).map((collection) => collection.deleteMany({})));
 });
