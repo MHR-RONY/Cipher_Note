@@ -1,9 +1,24 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, BookOpen, LockKeyhole, Sparkles } from "lucide-react";
-import { useState } from "react";
-import { Field } from "@/components/Forms";
-import { demo } from "@/lib/demo";
+import { createFileRoute } from "@tanstack/react-router";
+import { LoginPage } from "@/components/LoginPage";
 
-export const Route = createFileRoute("/login")({ validateSearch: (search: Record<string, unknown>) => ({ signedOut: search["signedOut"] === "1" ? "1" : undefined }), head: () => ({ meta: [{ title: "Member sign in — CipherNote" }, { name: "description", content: "Sign in to your private CipherNote notes." }, { property: "og:title", content: "Member sign in — CipherNote" }, { property: "og:description", content: "Sign in to your private CipherNote notes." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }), component: Login });
+export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    signedOut: search["signedOut"] === "1" ? "1" : undefined,
+  }),
+  head: () => ({
+    meta: [
+      { title: "Member sign in — CipherNote" },
+      { name: "description", content: "Sign in to your private CipherNote notes." },
+      { property: "og:title", content: "Member sign in — CipherNote" },
+      { property: "og:description", content: "Sign in to your private CipherNote notes." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
+  component: Login,
+});
 
-function Login() { const navigate = useNavigate(); const { signedOut } = Route.useSearch(); const [email, setEmail] = useState("lee@inkwell.demo"); const [password, setPassword] = useState("member123"); const [error, setError] = useState(""); async function submit(event: React.FormEvent) { event.preventDefault(); setError(""); const user = await demo.login(email, password, "user"); if (!user) { setError("Check your email and password, then try again."); return; } void navigate({ to: "/notes" }); } return <div className="auth-reframe"><aside className="auth-showcase"><Link to="/" className="auth-logo"><span className="brand-mark">C</span>CIPHERNOTE</Link><div className="auth-showcase-copy"><span className="auth-kicker"><Sparkles size={14} /> A private workspace</span><h1>Make room for your best thinking.</h1><p>Your notebook is a quiet space for rough ideas, small observations, and the work you want to return to.</p></div><div className="auth-feature-list"><span><BookOpen size={16} /> Your notes, organised simply</span><span><LockKeyhole size={16} /> Only you can see your work</span></div></aside><section className="auth-form-side"><div className="auth-form-wrap"><span className="auth-form-label">MEMBER ACCESS</span><h2>Welcome back</h2><p className="auth-intro">Sign in to continue to your private notebook.</p>{signedOut && <div className="auth-alert" role="alert"><span>Signed out</span><p>Sign in again to continue to CipherNote.</p></div>}<form className="form-stack auth-form" onSubmit={submit}>{error && <div className="error-line">{error}</div>}<Field label="Email address" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required/><Field label="Password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required/><button className="button button-primary auth-submit">Enter CipherNote <ArrowRight size={17} /></button></form><div className="demo-credentials"><span>DEMO MEMBER</span><strong>lee@inkwell.demo · member123</strong></div><p className="auth-switch">New to CipherNote? <Link to="/register">Create your account</Link></p></div></section></div>; }
+function Login() {
+  const { signedOut } = Route.useSearch();
+  return <LoginPage signedOut={signedOut} />;
+}

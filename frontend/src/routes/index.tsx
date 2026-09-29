@@ -1,3 +1,28 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-export const Route = createFileRoute("/")({ head: () => ({ meta: [{ title: "CipherNote" }, { name: "description", content: "A private workspace for notes and an administrator area for the team." }, { property: "og:title", content: "CipherNote" }, { property: "og:description", content: "A private workspace for notes and an administrator area for the team." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }), component: Home });
-function Home() { return <div className="entry-page"><div className="entry-copy"><Link to="/" className="brand">CipherNote</Link><h1>A quieter place to keep the work that matters.</h1><p>Choose the space you need. Member notebooks and workspace administration are kept separate.</p></div><div className="entry-options"><section><span className="mono">MEMBER AREA</span><h2>My notes</h2><p>Your writing and posts, visible only to you.</p><Link className="button button-primary" to="/login" search={{ signedOut: undefined }}>Member sign in</Link></section><section><span className="mono">ADMINISTRATION</span><h2>Workspace admin</h2><p>Manage people, view notes, and review interests.</p><Link className="button button-secondary" to="/admin/login">Administrator sign in</Link></section></div></div>; }
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { LoginPage } from "@/components/LoginPage";
+import { useAuth } from "@/context/AuthContext";
+
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "CipherNote" },
+      { name: "description", content: "Sign in to your private CipherNote notes." },
+      { property: "og:title", content: "CipherNote" },
+      { property: "og:description", content: "Sign in to your private CipherNote notes." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
+  component: Home,
+});
+
+function Home() {
+  const { user, userLoading } = useAuth();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!userLoading && user) void navigate({ to: "/notes", replace: true });
+  }, [navigate, user, userLoading]);
+  if (userLoading || user) return null;
+  return <LoginPage />;
+}
